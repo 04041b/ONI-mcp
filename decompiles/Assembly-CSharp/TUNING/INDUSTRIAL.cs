@@ -1,0 +1,16 @@
+﻿// Decompiled with JetBrains decompiler
+// Type: TUNING.INDUSTRIAL
+// Assembly: Assembly-CSharp, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
+// MVID: 81E516D9-C2BC-4960-8BCA-C24A555D88DE
+// Assembly location: M:\SteamLibrary\steamapps\common\OxygenNotIncluded\OxygenNotIncluded_Data\Managed\Assembly-CSharp.dll
+
+#nullable disable
+namespace TUNING;
+
+public abstract class INDUSTRIAL
+{
+  public abstract class RECIPES
+  {
+    public static readonly float STANDARD_FABRICATION_TIME = 30f;
+  }
+}

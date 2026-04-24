@@ -1,0 +1,66 @@
+﻿// Decompiled with JetBrains decompiler
+// Type: Database.AtLeastOneBuildingForEachDupe
+// Assembly: Assembly-CSharp, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
+// MVID: 81E516D9-C2BC-4960-8BCA-C24A555D88DE
+// Assembly location: M:\SteamLibrary\steamapps\common\OxygenNotIncluded\OxygenNotIncluded_Data\Managed\Assembly-CSharp.dll
+
+using STRINGS;
+using System.Collections.Generic;
+
+#nullable disable
+namespace Database;
+
+public class AtLeastOneBuildingForEachDupe : 
+  ColonyAchievementRequirement,
+  AchievementRequirementSerialization_Deprecated
+{
+  private List<Tag> validBuildingTypes = new List<Tag>();
+
+  public AtLeastOneBuildingForEachDupe(List<Tag> validBuildingTypes)
+  {
+    this.validBuildingTypes = validBuildingTypes;
+  }
+
+  public override bool Success()
+  {
+    if (Components.LiveMinionIdentities.Items.Count <= 0)
+      return false;
+    int num = 0;
+    foreach (IBasicBuilding basicBuilding in Components.BasicBuildings.Items)
+    {
+      Tag prefabTag = basicBuilding.transform.GetComponent<KPrefabID>().PrefabTag;
+      if (this.validBuildingTypes.Contains(prefabTag))
+      {
+        ++num;
+        if (prefabTag == (Tag) "FlushToilet" || prefabTag == (Tag) "Outhouse")
+          return true;
+      }
+    }
+    return num >= Components.LiveMinionIdentities.Items.Count;
+  }
+
+  public override bool Fail() => false;
+
+  public void Deserialize(IReader reader)
+  {
+    int capacity = reader.ReadInt32();
+    this.validBuildingTypes = new List<Tag>(capacity);
+    for (int index = 0; index < capacity; ++index)
+      this.validBuildingTypes.Add(new Tag(reader.ReadKleiString()));
+  }
+
+  public override string GetProgress(bool complete)
+  {
+    if (this.validBuildingTypes.Contains((Tag) "FlushToilet"))
+      return (string) COLONY_ACHIEVEMENTS.MISC_REQUIREMENTS.STATUS.BUILT_ONE_TOILET;
+    if (complete)
+      return (string) COLONY_ACHIEVEMENTS.MISC_REQUIREMENTS.STATUS.BUILT_ONE_BED_PER_DUPLICANT;
+    int num = 0;
+    foreach (IBasicBuilding basicBuilding in Components.BasicBuildings.Items)
+    {
+      if (this.validBuildingTypes.Contains(basicBuilding.transform.GetComponent<KPrefabID>().PrefabTag))
+        ++num;
+    }
+    return string.Format((string) COLONY_ACHIEVEMENTS.MISC_REQUIREMENTS.STATUS.BUILING_BEDS, (object) (complete ? Components.LiveMinionIdentities.Items.Count : num), (object) Components.LiveMinionIdentities.Items.Count);
+  }
+}

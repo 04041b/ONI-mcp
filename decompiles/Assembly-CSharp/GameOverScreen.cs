@@ -1,0 +1,31 @@
+﻿// Decompiled with JetBrains decompiler
+// Type: GameOverScreen
+// Assembly: Assembly-CSharp, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
+// MVID: 81E516D9-C2BC-4960-8BCA-C24A555D88DE
+// Assembly location: M:\SteamLibrary\steamapps\common\OxygenNotIncluded\OxygenNotIncluded_Data\Managed\Assembly-CSharp.dll
+
+#nullable disable
+public class GameOverScreen : KModalScreen
+{
+  public KButton DismissButton;
+  public KButton QuitButton;
+
+  protected override void OnSpawn()
+  {
+    base.OnSpawn();
+    this.Init();
+  }
+
+  private void Init()
+  {
+    if ((bool) (UnityEngine.Object) this.QuitButton)
+      this.QuitButton.onClick += (System.Action) (() => this.Quit());
+    if (!(bool) (UnityEngine.Object) this.DismissButton)
+      return;
+    this.DismissButton.onClick += (System.Action) (() => this.Dismiss());
+  }
+
+  private void Quit() => PauseScreen.TriggerQuitGame();
+
+  private void Dismiss() => this.Show(false);
+}

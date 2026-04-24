@@ -1,0 +1,62 @@
+﻿// Decompiled with JetBrains decompiler
+// Type: ChoreCountTracker
+// Assembly: Assembly-CSharp, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
+// MVID: 81E516D9-C2BC-4960-8BCA-C24A555D88DE
+// Assembly location: M:\SteamLibrary\steamapps\common\OxygenNotIncluded\OxygenNotIncluded_Data\Managed\Assembly-CSharp.dll
+
+using System.Collections.Generic;
+using UnityEngine;
+
+#nullable disable
+public class ChoreCountTracker : WorldTracker
+{
+  public ChoreGroup choreGroup;
+
+  public ChoreCountTracker(int worldID, ChoreGroup group)
+    : base(worldID)
+  {
+    this.choreGroup = group;
+  }
+
+  public override void UpdateData()
+  {
+    float num = 0.0f;
+    List<Chore> choreList;
+    GlobalChoreProvider.Instance.choreWorldMap.TryGetValue(this.WorldID, out choreList);
+    for (int index = 0; choreList != null && index < choreList.Count; ++index)
+    {
+      Chore chore = choreList[index];
+      if (chore != null && !chore.target.Equals((object) null) && !((Object) chore.gameObject == (Object) null))
+      {
+        foreach (ChoreGroup group in chore.choreType.groups)
+        {
+          if (group == this.choreGroup)
+          {
+            ++num;
+            break;
+          }
+        }
+      }
+    }
+    List<FetchChore> fetchChoreList;
+    GlobalChoreProvider.Instance.fetchMap.TryGetValue(this.WorldID, out fetchChoreList);
+    for (int index = 0; fetchChoreList != null && index < fetchChoreList.Count; ++index)
+    {
+      Chore chore = (Chore) fetchChoreList[index];
+      if (chore != null && !chore.target.Equals((object) null) && !((Object) chore.gameObject == (Object) null))
+      {
+        foreach (ChoreGroup group in chore.choreType.groups)
+        {
+          if (group == this.choreGroup)
+          {
+            ++num;
+            break;
+          }
+        }
+      }
+    }
+    this.AddPoint(num);
+  }
+
+  public override string FormatValueString(float value) => value.ToString();
+}

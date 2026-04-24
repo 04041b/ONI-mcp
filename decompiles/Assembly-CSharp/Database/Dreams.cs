@@ -1,0 +1,22 @@
+﻿// Decompiled with JetBrains decompiler
+// Type: Database.Dreams
+// Assembly: Assembly-CSharp, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
+// MVID: 81E516D9-C2BC-4960-8BCA-C24A555D88DE
+// Assembly location: M:\SteamLibrary\steamapps\common\OxygenNotIncluded\OxygenNotIncluded_Data\Managed\Assembly-CSharp.dll
+
+#nullable disable
+namespace Database;
+
+public class Dreams : ResourceSet<Dream>
+{
+  public Dream CommonDream;
+
+  public Dreams(ResourceSet parent)
+    : base(nameof (Dreams), parent)
+  {
+    this.CommonDream = new Dream(nameof (CommonDream), (ResourceSet) this, "dream_tear_swirly_kanim", new string[1]
+    {
+      "dreamIcon_journal"
+    });
+  }
+}
