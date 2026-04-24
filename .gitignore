@@ -8,3 +8,5 @@ obj
 /ModsGuide/ManualGeneratorAdvanced
 /ModsGuide/SharedLib
 *.user
+decompiles/
+mcp_server/__pycache__/
