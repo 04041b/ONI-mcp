@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using System.Threading;
-using System.Text.RegularExpressions;
+using Newtonsoft.Json;
 
 namespace MCPServerMod
 {
@@ -11,6 +11,35 @@ namespace MCPServerMod
         private static object gameActionLock = new object();
         public static Queue<Action> actionQueue = new Queue<Action>();
 
+        private class DigRequest
+        {
+            public int x { get; set; } = -1;
+            public int y { get; set; } = -1;
+        }
+
+        private class BuildRequest
+        {
+            public int x { get; set; } = -1;
+            public int y { get; set; } = -1;
+            [JsonProperty("building_id")]
+            public string building_id { get; set; }
+            public List<string> materials { get; set; }
+            public int priority { get; set; } = 5;
+        }
+
+        private class CancelRequest
+        {
+            public int x { get; set; } = -1;
+            public int y { get; set; } = -1;
+        }
+
+        private class PriorityRequest
+        {
+            public int x { get; set; } = -1;
+            public int y { get; set; } = -1;
+            public int priority { get; set; } = 5;
+        }
+
         public static void Initialize()
         {
             Console.WriteLine("MCPServerMod: Action Handlers Initialized.");
@@ -18,46 +47,56 @@ namespace MCPServerMod
 
         public static string HandleAction(string path, string jsonBody)
         {
-            int x = ExtractInt(jsonBody, "x");
-            int y = ExtractInt(jsonBody, "y");
-            int cell = -1;
-
-            if (x >= 0 && y >= 0)
+            if (Game.Instance == null)
             {
-                cell = Grid.XYToCell(x, y);
+                return "{\"status\": \"error\", \"message\": \"Game not loaded\"}";
             }
 
-            if (path == "/dig")
+            try
             {
-                return EnqueueDig(cell);
-            }
-            else if (path == "/build")
-            {
-                string buildingId = ExtractString(jsonBody, "building_id");
-                string materials = ExtractArray(jsonBody, "materials");
-                int priority = ExtractInt(jsonBody, "priority", 5);
-                return EnqueueBuild(cell, buildingId, materials, priority);
-            }
-            else if (path == "/cancel")
-            {
-                return EnqueueCancel(cell);
-            }
-            else if (path == "/priority")
-            {
-                int priority = ExtractInt(jsonBody, "priority", 5);
-                return EnqueuePriority(cell, priority);
-            }
+                if (path == "/dig")
+                {
+                    var req = JsonConvert.DeserializeObject<DigRequest>(jsonBody);
+                    int cell = (req.x >= 0 && req.y >= 0) ? Grid.XYToCell(req.x, req.y) : -1;
+                    return EnqueueDig(cell);
+                }
+                else if (path == "/build")
+                {
+                    var req = JsonConvert.DeserializeObject<BuildRequest>(jsonBody);
+                    int cell = (req.x >= 0 && req.y >= 0) ? Grid.XYToCell(req.x, req.y) : -1;
+                    return EnqueueBuild(cell, req.building_id, req.materials, req.priority);
+                }
+                else if (path == "/cancel")
+                {
+                    var req = JsonConvert.DeserializeObject<CancelRequest>(jsonBody);
+                    int cell = (req.x >= 0 && req.y >= 0) ? Grid.XYToCell(req.x, req.y) : -1;
+                    return EnqueueCancel(cell);
+                }
+                else if (path == "/priority")
+                {
+                    var req = JsonConvert.DeserializeObject<PriorityRequest>(jsonBody);
+                    int cell = (req.x >= 0 && req.y >= 0) ? Grid.XYToCell(req.x, req.y) : -1;
+                    return EnqueuePriority(cell, req.priority);
+                }
 
-            return "{\"status\": \"error\", \"message\": \"Unknown endpoint\"}";
+                return "{\"status\": \"error\", \"message\": \"Unknown endpoint\"}";
+            }
+            catch (Exception ex)
+            {
+                string msg = ex.Message.Replace("\"", "\\\"");
+                return "{\"status\": \"error\", \"message\": \"Invalid JSON: " + msg + "\"}";
+            }
         }
 
         private static string EnqueueDig(int cell)
         {
             if (cell < 0 || cell >= Grid.CellCount) return "{\"status\": \"error\", \"message\": \"Invalid cell coordinates\"}";
 
+            bool ran = false;
             bool success = false;
-            ExecuteOnMainThread(() =>
+            bool threadSuccess = ExecuteOnMainThread(() =>
             {
+                ran = true;
                 if (Grid.Solid[cell])
                 {
                     GameObject go = DigTool.PlaceDig(cell, 0);
@@ -69,19 +108,26 @@ namespace MCPServerMod
                 }
             });
 
+            if (!threadSuccess || !ran)
+            {
+                return "{\"status\": \"error\", \"message\": \"Timed out waiting for main thread (is the game paused or loading?)\"}";
+            }
+
             return success ? "{\"status\": \"success\"}" : "{\"status\": \"error\", \"message\": \"Cell cannot be dug or already queued\"}";
         }
 
-        private static string EnqueueBuild(int cell, string buildingId, string materialString, int priority)
+        private static string EnqueueBuild(int cell, string buildingId, List<string> materials, int priority)
         {
             if (cell < 0 || cell >= Grid.CellCount) return "{\"status\": \"error\", \"message\": \"Invalid cell coordinates\"}";
             if (string.IsNullOrEmpty(buildingId)) return "{\"status\": \"error\", \"message\": \"building_id is required\"}";
 
+            bool ran = false;
             bool success = false;
             string error = "";
 
-            ExecuteOnMainThread(() =>
+            bool threadSuccess = ExecuteOnMainThread(() =>
             {
+                ran = true;
                 BuildingDef def = Assets.GetBuildingDef(buildingId);
                 if (def == null)
                 {
@@ -90,12 +136,11 @@ namespace MCPServerMod
                 }
 
                 List<Tag> elements = new List<Tag>();
-                if (!string.IsNullOrEmpty(materialString))
+                if (materials != null)
                 {
-                    string[] parts = materialString.Split(',');
-                    foreach (string p in parts)
+                    foreach (string p in materials)
                     {
-                        string trimmed = p.Trim('"', ' ', '[', ']');
+                        string trimmed = p.Trim();
                         if (!string.IsNullOrEmpty(trimmed))
                         {
                             elements.Add(new Tag(trimmed));
@@ -138,6 +183,11 @@ namespace MCPServerMod
                 }
             });
 
+            if (!threadSuccess || !ran)
+            {
+                return "{\"status\": \"error\", \"message\": \"Timed out waiting for main thread (is the game paused or loading?)\"}";
+            }
+
             return success ? "{\"status\": \"success\"}" : $"{{\"status\": \"error\", \"message\": \"{error}\"}}";
         }
 
@@ -145,46 +195,85 @@ namespace MCPServerMod
         {
             if (cell < 0 || cell >= Grid.CellCount) return "{\"status\": \"error\", \"message\": \"Invalid cell coordinates\"}";
 
-            ExecuteOnMainThread(() =>
+            bool ran = false;
+            bool success = false;
+            bool threadSuccess = ExecuteOnMainThread(() =>
             {
-                for (int layer = 0; layer < 45; layer++)
+                ran = true;
+                GameObject buildingGo = Grid.Objects[cell, (int)ObjectLayer.Building];
+                if (buildingGo != null)
                 {
-                    GameObject go = Grid.Objects[cell, layer];
-                    if (go != null)
+                    Constructable constructable = buildingGo.GetComponent<Constructable>();
+                    Deconstructable deconstructable = buildingGo.GetComponent<Deconstructable>();
+                    if (constructable != null || (deconstructable != null && deconstructable.IsMarkedForDeconstruction()))
                     {
-                        go.Trigger(2127324410, null);
+                        buildingGo.Trigger(2127324410, null);
+                        success = true;
                     }
+                }
+
+                GameObject digGo = Grid.Objects[cell, (int)ObjectLayer.DigPlacer];
+                if (digGo != null)
+                {
+                    digGo.Trigger(2127324410, null);
+                    success = true;
                 }
             });
 
-            return "{\"status\": \"success\"}";
+            if (!threadSuccess || !ran)
+            {
+                return "{\"status\": \"error\", \"message\": \"Timed out waiting for main thread (is the game paused or loading?)\"}";
+            }
+
+            return success ? "{\"status\": \"success\"}" : "{\"status\": \"error\", \"message\": \"No cancellable target at cell\"}";
         }
 
         private static string EnqueuePriority(int cell, int priority)
         {
-             if (cell < 0 || cell >= Grid.CellCount) return "{\"status\": \"error\", \"message\": \"Invalid cell coordinates\"}";
+            if (cell < 0 || cell >= Grid.CellCount) return "{\"status\": \"error\", \"message\": \"Invalid cell coordinates\"}";
 
-            ExecuteOnMainThread(() =>
+            bool ran = false;
+            bool success = false;
+            bool threadSuccess = ExecuteOnMainThread(() =>
             {
+                ran = true;
                 PrioritySetting p = new PrioritySetting(PriorityScreen.PriorityClass.basic, priority);
-                for (int layer = 0; layer < 45; layer++)
+
+                GameObject buildingGo = Grid.Objects[cell, (int)ObjectLayer.Building];
+                if (buildingGo != null)
                 {
-                    GameObject go = Grid.Objects[cell, layer];
-                    if (go != null)
+                    Prioritizable pr = buildingGo.GetComponent<Prioritizable>();
+                    if (pr != null)
                     {
-                        Prioritizable pr = go.GetComponent<Prioritizable>();
+                        pr.SetMasterPriority(p);
+                        success = true;
+                    }
+                }
+
+                if (!success)
+                {
+                    GameObject digGo = Grid.Objects[cell, (int)ObjectLayer.DigPlacer];
+                    if (digGo != null)
+                    {
+                        Prioritizable pr = digGo.GetComponent<Prioritizable>();
                         if (pr != null)
                         {
                             pr.SetMasterPriority(p);
+                            success = true;
                         }
                     }
                 }
             });
 
-            return "{\"status\": \"success\"}";
+            if (!threadSuccess || !ran)
+            {
+                return "{\"status\": \"error\", \"message\": \"Timed out waiting for main thread (is the game paused or loading?)\"}";
+            }
+
+            return success ? "{\"status\": \"success\"}" : "{\"status\": \"error\", \"message\": \"No prioritizable target at cell\"}";
         }
 
-        private static void ExecuteOnMainThread(Action action)
+        private static bool ExecuteOnMainThread(Action action)
         {
             ManualResetEvent doneEvent = new ManualResetEvent(false);
 
@@ -201,8 +290,7 @@ namespace MCPServerMod
                 actionQueue.Enqueue(wrappedAction);
             }
 
-            // Wait up to 2 seconds for the main thread to process it
-            doneEvent.WaitOne(2000);
+            return doneEvent.WaitOne(1000);
         }
 
         public static void ProcessMainThreadActions()
@@ -222,30 +310,6 @@ namespace MCPServerMod
                     }
                 }
             }
-        }
-
-        private static int ExtractInt(string json, string key, int defaultVal = -1)
-        {
-            Regex r = new Regex($"\"{key}\"\\s*:\\s*(\\d+)");
-            Match m = r.Match(json);
-            if (m.Success && int.TryParse(m.Groups[1].Value, out int result)) return result;
-            return defaultVal;
-        }
-
-        private static string ExtractString(string json, string key)
-        {
-            Regex r = new Regex($"\"{key}\"\\s*:\\s*\"([^\"]+)\"");
-            Match m = r.Match(json);
-            if (m.Success) return m.Groups[1].Value;
-            return string.Empty;
-        }
-
-        private static string ExtractArray(string json, string key)
-        {
-            Regex r = new Regex($"\"{key}\"\\s*:\\s*\\[([^\\]]+)\\]");
-            Match m = r.Match(json);
-            if (m.Success) return m.Groups[1].Value;
-            return string.Empty;
         }
     }
 }

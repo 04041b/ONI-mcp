@@ -37,6 +37,9 @@
     <Reference Include="Assembly-CSharp">
       <HintPath>..\..\decompiles\Assembly-CSharp\lib\Assembly-CSharp.dll</HintPath>
     </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>..\..\decompiles\Assembly-CSharp\lib\Newtonsoft.Json.dll</HintPath>
+    </Reference>
     <Reference Include="Assembly-CSharp-firstpass">
       <HintPath>..\..\decompiles\Assembly-CSharp\lib\Assembly-CSharp-firstpass.dll</HintPath>
     </Reference>
