@@ -1392,7 +1392,7 @@ namespace MCPServerMod
                 actionQueue.Enqueue(wrappedAction);
             }
 
-            return doneEvent.WaitOne(1000);
+            return doneEvent.WaitOne(3000);
         }
 
         public static void ProcessMainThreadActions()
