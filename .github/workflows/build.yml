@@ -1,0 +1,40 @@
+name: build
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+  pull_request:
+    paths-ignore:
+      - '**.md'
+
+jobs:
+  build-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install mono-complete
+        shell: bash
+        run: sudo apt-get update && sudo apt-get install -y mono-complete
+
+      - name: Build C# Mod
+        shell: bash
+        run: xbuild ModsGuide/MCPServerMod/MCPServerMod.csproj
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        shell: bash
+        run: pip install -r mcp_server/requirements.txt
+
+      - name: Syntax-check Python entry point
+        shell: bash
+        run: python -c "import ast; ast.parse(open('mcp_server/oni_mcp_server.py').read())"
