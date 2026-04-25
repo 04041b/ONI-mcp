@@ -68,5 +68,43 @@ def oni_set_priority(x: int, y: int, priority: int) -> str:
     """
     return send_request("/priority", {"x": x, "y": y, "priority": priority})
 
+
+@mcp.tool()
+def oni_grid_cell(x: int, y: int) -> str:
+    """Inspect a single cell.
+    Args:
+        x: The X coordinate
+        y: The Y coordinate
+    """
+    return send_request("/grid_cell", {"x": x, "y": y})
+
+@mcp.tool()
+def oni_grid_region(x_min: int, y_min: int, x_max: int, y_max: int, fields: list[str]) -> str:
+    """Get a rectangular region summary.
+    Args:
+        x_min: Minimum X coordinate
+        y_min: Minimum Y coordinate
+        x_max: Maximum X coordinate
+        y_max: Maximum Y coordinate
+        fields: A list of fields to include (e.g. ['element', 'solid', 'building_id'])
+    """
+    return send_request("/grid_region", {
+        "x_min": x_min,
+        "y_min": y_min,
+        "x_max": x_max,
+        "y_max": y_max,
+        "fields": fields
+    })
+
+@mcp.tool()
+def oni_resources() -> str:
+    """Get colony-wide inventory aggregated."""
+    return send_request("/resources", {})
+
+@mcp.tool()
+def oni_colony_status() -> str:
+    """Get top-level colony state."""
+    return send_request("/colony_status", {})
+
 if __name__ == "__main__":
     mcp.run()
