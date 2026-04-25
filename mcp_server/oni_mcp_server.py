@@ -171,5 +171,26 @@ def oni_networks() -> str:
     """Read the state of all power, automation, liquid, gas, and solid conveyor networks."""
     return send_request("/networks", {})
 
+@mcp.tool()
+def oni_pause() -> str:
+    """Pause the game."""
+    return send_request("/pause", {})
+
+@mcp.tool()
+def oni_unpause() -> str:
+    """Resume the game."""
+    return send_request("/unpause", {})
+
+@mcp.tool()
+def oni_set_speed(speed: int) -> str:
+    """Set the running game speed.
+    Args:
+        speed: The game speed to set (0 = 1x, 1 = 2x, 2 = 3x).
+    """
+    if speed not in (0, 1, 2):
+        return json.dumps({"status": "error", "message": "speed must be 0, 1, or 2"})
+        
+    return send_request("/set_speed", {"speed": speed})
+
 if __name__ == "__main__":
     mcp.run()

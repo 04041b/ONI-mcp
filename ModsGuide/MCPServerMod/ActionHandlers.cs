@@ -92,6 +92,11 @@ namespace MCPServerMod
             public int limit { get; set; } = 100;
             public int offset { get; set; } = 0;
         }
+        
+        private class SetSpeedRequest
+        {
+            public int speed { get; set; }
+        }
 
         public static void Initialize()
         {
@@ -184,6 +189,19 @@ namespace MCPServerMod
                 else if (path == "/networks")
                 {
                     return EnqueueNetworks();
+                }
+                else if (path == "/pause")
+                {
+                    return EnqueuePause();
+                }
+                else if (path == "/unpause")
+                {
+                    return EnqueueUnpause();
+                }
+                else if (path == "/set_speed")
+                {
+                    var req = JsonConvert.DeserializeObject<SetSpeedRequest>(jsonBody);
+                    return EnqueueSetSpeed(req.speed);
                 }
 
                 return "{\"status\": \"error\", \"message\": \"Unknown endpoint\"}";
@@ -990,8 +1008,9 @@ namespace MCPServerMod
         {
             bool ran = false;
             string result = "";
+            bool threadSuccess = false;
 
-            bool threadSuccess = ExecuteOnMainThread(() =>
+            threadSuccess = ExecuteOnMainThread(() =>
             {
                 ran = true;
 
@@ -1364,6 +1383,100 @@ namespace MCPServerMod
                     next_offset = next_offset,
                     items = items
                 });
+            });
+
+            if (!threadSuccess || !ran)
+            {
+                return "{\"status\": \"error\", \"message\": \"Timed out waiting for main thread (is the game paused or loading?)\"}";
+            }
+
+            return result;
+        }
+
+        private static string EnqueuePause()
+        {
+            bool ran = false;
+            string result = "";
+            bool threadSuccess = false;
+
+            threadSuccess = ExecuteOnMainThread(() =>
+            {
+                ran = true;
+                
+                if (SpeedControlScreen.Instance != null && !SpeedControlScreen.Instance.IsPaused)
+                {
+                    SpeedControlScreen.Instance.Pause(false);
+                }
+                
+                result = JsonConvert.SerializeObject(new { status = "success" });
+            });
+
+            if (!threadSuccess || !ran)
+            {
+                return "{\"status\": \"error\", \"message\": \"Timed out waiting for main thread (is the game paused or loading?)\"}";
+            }
+
+            return result;
+        }
+
+        private static string EnqueueUnpause()
+        {
+            bool ran = false;
+            string result = "";
+            bool threadSuccess = false;
+
+            threadSuccess = ExecuteOnMainThread(() =>
+            {
+                ran = true;
+                
+                if (SpeedControlScreen.Instance != null && SpeedControlScreen.Instance.IsPaused)
+                {
+                    SpeedControlScreen.Instance.Unpause(false);
+                }
+                
+                result = JsonConvert.SerializeObject(new { status = "success" });
+            });
+
+            if (!threadSuccess || !ran)
+            {
+                return "{\"status\": \"error\", \"message\": \"Timed out waiting for main thread (is the game paused or loading?)\"}";
+            }
+
+            return result;
+        }
+
+        private static string EnqueueSetSpeed(int speed)
+        {
+            if (speed < 0 || speed > 2)
+            {
+                return JsonConvert.SerializeObject(new
+                {
+                    status = "error",
+                    message = "speed must be 0, 1, or 2"
+                });
+            }
+
+            bool ran = false;
+            string result = "";
+            bool threadSuccess = false;
+
+            threadSuccess = ExecuteOnMainThread(() =>
+            {
+                ran = true;
+                
+                if (SpeedControlScreen.Instance != null)
+                {
+                    SpeedControlScreen.Instance.SetSpeed(speed);
+                    result = JsonConvert.SerializeObject(new { status = "success" });
+                }
+                else
+                {
+                    result = JsonConvert.SerializeObject(new
+                    {
+                        status = "error",
+                        message = "SpeedControlScreen instance not found"
+                    });
+                }
             });
 
             if (!threadSuccess || !ran)

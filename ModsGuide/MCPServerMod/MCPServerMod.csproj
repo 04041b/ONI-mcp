@@ -60,6 +60,9 @@
     <Reference Include="UnityEngine.CoreModule">
       <HintPath>..\..\dlls\Managed\UnityEngine.CoreModule.dll</HintPath>
     </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>..\..\dlls\Managed\UnityEngine.UI.dll</HintPath>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Loader.cs" />
