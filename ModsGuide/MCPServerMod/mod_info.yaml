@@ -1,2 +1,4 @@
-supportedContent: VANILLA_ID,EXPANSION1_ID
-lastWorkingBuild: 700000
+APIVersion: 2
+minimumSupportedBuild: 700000
+requiredDlcIds: []
+forbiddenDlcIds: []
