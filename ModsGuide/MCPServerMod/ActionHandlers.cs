@@ -1,4 +1,5 @@
 using System;
+using SysAction = System.Action;
 using System.Collections.Generic;
 using UnityEngine;
 using System.Threading;
@@ -9,7 +10,7 @@ namespace MCPServerMod
     public static class ActionHandlers
     {
         private static object gameActionLock = new object();
-        public static Queue<Action> actionQueue = new Queue<Action>();
+        public static Queue<SysAction> actionQueue = new Queue<SysAction>();
 
         private class DigRequest
         {
@@ -94,7 +95,8 @@ namespace MCPServerMod
 
             bool ran = false;
             bool success = false;
-            bool threadSuccess = ExecuteOnMainThread(() =>
+            bool threadSuccess = false;
+            threadSuccess = ExecuteOnMainThread(() =>
             {
                 ran = true;
                 if (Grid.Solid[cell])
@@ -125,7 +127,8 @@ namespace MCPServerMod
             bool success = false;
             string error = "";
 
-            bool threadSuccess = ExecuteOnMainThread(() =>
+            bool threadSuccess = false;
+            threadSuccess = ExecuteOnMainThread(() =>
             {
                 ran = true;
                 BuildingDef def = Assets.GetBuildingDef(buildingId);
@@ -197,7 +200,8 @@ namespace MCPServerMod
 
             bool ran = false;
             bool success = false;
-            bool threadSuccess = ExecuteOnMainThread(() =>
+            bool threadSuccess = false;
+            threadSuccess = ExecuteOnMainThread(() =>
             {
                 ran = true;
                 GameObject buildingGo = Grid.Objects[cell, (int)ObjectLayer.Building];
@@ -234,7 +238,8 @@ namespace MCPServerMod
 
             bool ran = false;
             bool success = false;
-            bool threadSuccess = ExecuteOnMainThread(() =>
+            bool threadSuccess = false;
+            threadSuccess = ExecuteOnMainThread(() =>
             {
                 ran = true;
                 PrioritySetting p = new PrioritySetting(PriorityScreen.PriorityClass.basic, priority);
@@ -273,11 +278,11 @@ namespace MCPServerMod
             return success ? "{\"status\": \"success\"}" : "{\"status\": \"error\", \"message\": \"No prioritizable target at cell\"}";
         }
 
-        private static bool ExecuteOnMainThread(Action action)
+        private static bool ExecuteOnMainThread(SysAction action)
         {
             ManualResetEvent doneEvent = new ManualResetEvent(false);
 
-            Action wrappedAction = () => {
+            SysAction wrappedAction = () => {
                 try {
                     action();
                 } finally {
@@ -299,7 +304,7 @@ namespace MCPServerMod
             {
                 while (actionQueue.Count > 0)
                 {
-                    Action action = actionQueue.Dequeue();
+                    SysAction action = actionQueue.Dequeue();
                     try
                     {
                         action.Invoke();

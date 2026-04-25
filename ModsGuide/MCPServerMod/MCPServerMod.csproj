@@ -32,16 +32,16 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="0Harmony">
-      <HintPath>..\..\decompiles\Assembly-CSharp\lib\0Harmony.dll</HintPath>
+      <HintPath>..\..\dlls\Managed\0Harmony.dll</HintPath>
     </Reference>
     <Reference Include="Assembly-CSharp">
-      <HintPath>..\..\decompiles\Assembly-CSharp\lib\Assembly-CSharp.dll</HintPath>
+      <HintPath>..\..\dlls\Managed\Assembly-CSharp.dll</HintPath>
     </Reference>
     <Reference Include="Newtonsoft.Json">
-      <HintPath>..\..\decompiles\Assembly-CSharp\lib\Newtonsoft.Json.dll</HintPath>
+      <HintPath>..\..\dlls\Managed\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="Assembly-CSharp-firstpass">
-      <HintPath>..\..\decompiles\Assembly-CSharp\lib\Assembly-CSharp-firstpass.dll</HintPath>
+      <HintPath>..\..\dlls\Managed\Assembly-CSharp-firstpass.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
@@ -52,10 +52,13 @@
     <Reference Include="System.Net.Http" />
     <Reference Include="System.Xml" />
     <Reference Include="UnityEngine">
-      <HintPath>..\..\decompiles\Assembly-CSharp\lib\UnityEngine.dll</HintPath>
+      <HintPath>..\..\dlls\Managed\UnityEngine.dll</HintPath>
+    </Reference>
+    <Reference Include="netstandard">
+      <HintPath>..\..\dlls\Managed\netstandard.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine.CoreModule">
-      <HintPath>..\..\decompiles\Assembly-CSharp\lib\UnityEngine.CoreModule.dll</HintPath>
+      <HintPath>..\..\dlls\Managed\UnityEngine.CoreModule.dll</HintPath>
     </Reference>
   </ItemGroup>
   <ItemGroup>
