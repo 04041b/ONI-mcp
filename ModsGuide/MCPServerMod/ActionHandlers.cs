@@ -334,18 +334,64 @@ namespace MCPServerMod
 
             bool ran = false;
             bool success = false;
-            bool threadSuccess = false;
-            threadSuccess = ExecuteOnMainThread(() =>
+            string error = null;
+            bool threadSuccess = ExecuteOnMainThread(() =>
             {
                 ran = true;
-                if (Grid.Solid[cell])
+                try
                 {
-                    GameObject go = DigTool.PlaceDig(cell, 0);
-                    if (go != null)
+                    if (!Grid.IsValidCell(cell))
                     {
-                        go.GetComponent<Prioritizable>().SetMasterPriority(new PrioritySetting(PriorityScreen.PriorityClass.basic, 5));
-                        success = true;
+                        error = "Cell is not valid";
+                        return;
                     }
+                    if (!Grid.Solid[cell])
+                    {
+                        error = "Cell is not solid (nothing to dig)";
+                        return;
+                    }
+                    if (Grid.Foundation[cell])
+                    {
+                        error = "Cell is foundation tile (cannot be dug)";
+                        return;
+                    }
+                    if (Grid.Objects[cell, (int)ObjectLayer.DigPlacer] != null)
+                    {
+                        error = "Cell already has a pending dig job";
+                        return;
+                    }
+
+                    // Spawn the Diggable prefab directly instead of going through DigTool.PlaceDig,
+                    // which depends on UI tool state that is absent when we are called from HTTP.
+                    GameObject prefab = Assets.GetPrefab(DiggableConfig.ID);
+                    if (prefab == null)
+                    {
+                        error = "DiggableConfig prefab not registered in Assets";
+                        return;
+                    }
+
+                    Vector3 pos = Grid.CellToPosCBC(cell, Grid.SceneLayer.Move);
+                    GameObject go = GameUtil.KInstantiate(prefab, pos, Grid.SceneLayer.Move, null, 0);
+                    if (go == null)
+                    {
+                        error = "KInstantiate returned null for Diggable prefab";
+                        return;
+                    }
+
+                    go.SetActive(true);
+
+                    Prioritizable pr = go.GetComponent<Prioritizable>();
+                    if (pr != null)
+                    {
+                        pr.SetMasterPriority(new PrioritySetting(PriorityScreen.PriorityClass.basic, 5));
+                    }
+
+                    success = true;
+                }
+                catch (Exception ex)
+                {
+                    error = ex.GetType().Name + ": " + ex.Message;
+                    Console.WriteLine("MCPServerMod: dig at cell " + cell + " threw " + error + "\n" + ex.StackTrace);
                 }
             });
 
@@ -354,7 +400,8 @@ namespace MCPServerMod
                 return "{\"status\": \"error\", \"message\": \"Timed out waiting for main thread (is the game paused or loading?)\"}";
             }
 
-            return success ? "{\"status\": \"success\"}" : "{\"status\": \"error\", \"message\": \"Cell cannot be dug or already queued\"}";
+            if (success) return "{\"status\": \"success\"}";
+            return JsonConvert.SerializeObject(new { status = "error", message = error ?? "Cell cannot be dug" });
         }
 
         private static string EnqueueBuild(int cell, string buildingId, List<string> materials, int priority)
