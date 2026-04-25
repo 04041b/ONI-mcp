@@ -25,6 +25,14 @@ jobs:
         shell: bash
         run: xbuild ModsGuide/MCPServerMod/MCPServerMod.csproj
 
+      - name: Upload Mod Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MCPServerMod-${{ github.sha }}
+          path: ModsGuide/MCPServerMod/bin/Debug/MCPServerMod.dll
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
