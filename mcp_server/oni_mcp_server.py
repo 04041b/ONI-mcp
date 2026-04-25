@@ -157,5 +157,19 @@ def oni_research_set_active(tech_id: str | None) -> str:
     """
     return send_request("/research_set_active", {"tech_id": tech_id})
 
+@mcp.tool()
+def oni_deconstruct(x: int, y: int) -> str:
+    """Mark a building at the given coordinates for deconstruction.
+    Args:
+        x: The x coordinate of the building to deconstruct.
+        y: The y coordinate of the building to deconstruct.
+    """
+    return send_request("/deconstruct", {"x": x, "y": y})
+
+@mcp.tool()
+def oni_networks() -> str:
+    """Read the state of all power, automation, liquid, gas, and solid conveyor networks."""
+    return send_request("/networks", {})
+
 if __name__ == "__main__":
     mcp.run()

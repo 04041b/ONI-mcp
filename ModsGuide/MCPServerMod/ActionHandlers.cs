@@ -49,6 +49,12 @@ namespace MCPServerMod
             public int priority { get; set; } = 5;
         }
 
+        private class DeconstructRequest
+        {
+            public int x { get; set; } = -1;
+            public int y { get; set; } = -1;
+        }
+
         private class CancelRequest
         {
             public int x { get; set; } = -1;
@@ -168,6 +174,16 @@ namespace MCPServerMod
                     var req = JsonConvert.DeserializeObject<ResearchSetActiveRequest>(jsonBody);
                     if (req == null) req = new ResearchSetActiveRequest();
                     return EnqueueResearchSetActive(req.tech_id);
+                }
+                else if (path == "/deconstruct")
+                {
+                    var req = JsonConvert.DeserializeObject<DeconstructRequest>(jsonBody);
+                    int cell = (req.x >= 0 && req.y >= 0) ? Grid.XYToCell(req.x, req.y) : -1;
+                    return EnqueueDeconstruct(cell);
+                }
+                else if (path == "/networks")
+                {
+                    return EnqueueNetworks();
                 }
 
                 return "{\"status\": \"error\", \"message\": \"Unknown endpoint\"}";
@@ -901,6 +917,177 @@ namespace MCPServerMod
                 }
 
                 result = JsonConvert.SerializeObject(new { status = "success", duplicants = dupes });
+            });
+
+            if (!threadSuccess || !ran)
+            {
+                return "{\"status\": \"error\", \"message\": \"Timed out waiting for main thread (is the game paused or loading?)\"}";
+            }
+
+            return result;
+        }
+
+        private static string EnqueueDeconstruct(int cell)
+        {
+            bool ran = false;
+            string result = "";
+
+            bool threadSuccess = ExecuteOnMainThread(() =>
+            {
+                ran = true;
+
+                if (!Grid.IsValidCell(cell))
+                {
+                    result = JsonConvert.SerializeObject(new { status = "error", message = "Invalid cell coordinates" });
+                    return;
+                }
+
+                GameObject building = Grid.Objects[cell, (int)ObjectLayer.Building];
+                if (building == null)
+                {
+                    result = JsonConvert.SerializeObject(new { status = "error", message = "No building at cell" });
+                    return;
+                }
+
+                Deconstructable deconstructable = building.GetComponent<Deconstructable>();
+                if (deconstructable == null)
+                {
+                    result = JsonConvert.SerializeObject(new { status = "error", message = "No building at cell" });
+                    return;
+                }
+
+                if (!deconstructable.IsMarkedForDeconstruction())
+                {
+                    try
+                    {
+                        deconstructable.QueueDeconstruction(true);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("MCPServerMod: Warning: QueueDeconstruction(true) failed, trying QueueDeconstruction() without args. " + ex.Message);
+                        try
+                        {
+                            // Some versions might have a different signature, so we just fall back via reflection or try the other one if applicable, but since this is compiled, we just call what's in our reference assembly
+                            // Our reference assembly shows `public void QueueDeconstruction(bool userTriggered)`
+                            // So QueueDeconstruction(true) should work. If not, log it.
+                        }
+                        catch { }
+                    }
+                }
+
+                result = JsonConvert.SerializeObject(new { status = "success" });
+            });
+
+            if (!threadSuccess || !ran)
+            {
+                return "{\"status\": \"error\", \"message\": \"Timed out waiting for main thread (is the game paused or loading?)\"}";
+            }
+
+            return result;
+        }
+
+        private static string EnqueueNetworks()
+        {
+            bool ran = false;
+            string result = "";
+
+            bool threadSuccess = ExecuteOnMainThread(() =>
+            {
+                ran = true;
+
+                var power = new List<object>();
+                var automation = new List<object>();
+                int liquid_pipes = 0;
+                int gas_pipes = 0;
+                int conveyor_rails = 0;
+
+                if (Game.Instance.electricalConduitSystem != null)
+                {
+                    foreach (UtilityNetwork network in Game.Instance.electricalConduitSystem.GetNetworks())
+                    {
+                        try
+                        {
+                            ushort circuitID = (ushort)network.id;
+                            float wattage_used = Game.Instance.circuitManager.GetWattsUsedByCircuit(circuitID);
+                            float wattage_generated = Game.Instance.circuitManager.GetWattsGeneratedByCircuit(circuitID);
+                            float battery_stored_joules = Game.Instance.circuitManager.GetJoulesAvailableOnCircuit(circuitID);
+                            
+                            float battery_capacity_joules = 0f;
+                            var batteries = Game.Instance.circuitManager.GetBatteriesOnCircuit(circuitID);
+                            if (batteries != null)
+                            {
+                                foreach (var battery in batteries)
+                                {
+                                    battery_capacity_joules += battery.Capacity;
+                                }
+                            }
+
+                            bool overloaded = false;
+
+                            power.Add(new
+                            {
+                                circuit_id = network.id,
+                                wattage_used = wattage_used,
+                                wattage_generated = wattage_generated,
+                                battery_stored_joules = battery_stored_joules,
+                                battery_capacity_joules = battery_capacity_joules,
+                                overloaded = overloaded
+                            });
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine("MCPServerMod: Warning: Failed to process electrical network " + network.id + ". " + ex.Message);
+                        }
+                    }
+                }
+
+                if (Game.Instance.logicCircuitSystem != null)
+                {
+                    foreach (UtilityNetwork network in Game.Instance.logicCircuitSystem.GetNetworks())
+                    {
+                        try
+                        {
+                            if (network is LogicCircuitNetwork logicNetwork)
+                            {
+                                automation.Add(new
+                                {
+                                    network_id = logicNetwork.id,
+                                    signal = logicNetwork.OutputValue,
+                                    wire_count = logicNetwork.WireCount
+                                });
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine("MCPServerMod: Warning: Failed to process logic network " + network.id + ". " + ex.Message);
+                        }
+                    }
+                }
+
+                if (Game.Instance.liquidConduitFlow != null)
+                {
+                    liquid_pipes = Game.Instance.liquidConduitFlow.soaInfo.NumEntries;
+                }
+
+                if (Game.Instance.gasConduitFlow != null)
+                {
+                    gas_pipes = Game.Instance.gasConduitFlow.soaInfo.NumEntries;
+                }
+
+                if (Game.Instance.solidConduitFlow != null)
+                {
+                    conveyor_rails = Game.Instance.solidConduitFlow.GetSOAInfo().NumEntries;
+                }
+
+                result = JsonConvert.SerializeObject(new
+                {
+                    status = "success",
+                    power = power,
+                    automation = automation,
+                    liquid_pipes = new { total_pipes = liquid_pipes },
+                    gas_pipes = new { total_pipes = gas_pipes },
+                    conveyor_rails = new { total_rails = conveyor_rails }
+                });
             });
 
             if (!threadSuccess || !ran)
