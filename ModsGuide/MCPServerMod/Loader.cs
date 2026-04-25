@@ -1,19 +1,17 @@
 using System;
 using System.Reflection;
 using HarmonyLib;
+using KMod;
 using UnityEngine;
 
 namespace MCPServerMod
 {
-    public static class Loader
+    public class MCPServerUserMod : UserMod2
     {
-        public static AssemblyName AssemblyName => Assembly.GetExecutingAssembly().GetName();
-        public static Version Version => AssemblyName.Version;
-        public static string Name => AssemblyName.Name;
-
-        public static void OnLoad()
+        public override void OnLoad(Harmony harmony)
         {
-            Console.WriteLine($"Mod <{Name}> loaded: {Version}");
+            base.OnLoad(harmony);
+            Console.WriteLine("MCPServerUserMod loaded!");
             // Start the HTTP Server when the mod is loaded
             HttpServer.StartServer();
         }
