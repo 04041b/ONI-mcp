@@ -12,7 +12,7 @@ namespace MCPServerMod
         private static object gameActionLock = new object();
         public static Queue<System.Action> actionQueue = new Queue<System.Action>();
 
-                private class GridCellRequest
+        private class GridCellRequest
         {
             public int x { get; set; } = -1;
             public int y { get; set; } = -1;
@@ -54,6 +54,31 @@ namespace MCPServerMod
             public int x { get; set; } = -1;
             public int y { get; set; } = -1;
             public int priority { get; set; } = 5;
+        }
+
+        private class Region
+        {
+            public int x_min { get; set; }
+            public int y_min { get; set; }
+            public int x_max { get; set; }
+            public int y_max { get; set; }
+        }
+
+        private class BuildingsRequest
+        {
+            public Region region { get; set; }
+            public string prefab_id { get; set; }
+            public string state { get; set; }
+            public int limit { get; set; } = 100;
+            public int offset { get; set; } = 0;
+        }
+
+        private class JobsRequest
+        {
+            public string type { get; set; }
+            public Region region { get; set; }
+            public int limit { get; set; } = 100;
+            public int offset { get; set; } = 0;
         }
 
         public static void Initialize()
@@ -111,6 +136,22 @@ namespace MCPServerMod
                 else if (path == "/colony_status")
                 {
                     return EnqueueColonyStatus();
+                }
+                else if (path == "/duplicants")
+                {
+                    return EnqueueDuplicants();
+                }
+                else if (path == "/buildings")
+                {
+                    var req = JsonConvert.DeserializeObject<BuildingsRequest>(jsonBody);
+                    if (req == null) req = new BuildingsRequest();
+                    return EnqueueBuildings(req);
+                }
+                else if (path == "/jobs")
+                {
+                    var req = JsonConvert.DeserializeObject<JobsRequest>(jsonBody);
+                    if (req == null) req = new JobsRequest();
+                    return EnqueueJobs(req);
                 }
 
                 return "{\"status\": \"error\", \"message\": \"Unknown endpoint\"}";
@@ -311,7 +352,6 @@ namespace MCPServerMod
             return success ? "{\"status\": \"success\"}" : "{\"status\": \"error\", \"message\": \"No prioritizable target at cell\"}";
         }
 
-        
         private static string EnqueueGridCell(int x, int y)
         {
             int cell = (x >= 0 && y >= 0) ? Grid.XYToCell(x, y) : -1;
@@ -337,7 +377,7 @@ namespace MCPServerMod
                 bool solid = Grid.IsSolidCell(cell);
                 bool gas = Grid.IsGas(cell);
                 bool liquid = Grid.IsLiquid(cell);
-                
+
                 string building_id = null;
                 GameObject buildingGo = Grid.Objects[cell, (int)ObjectLayer.Building];
                 if (buildingGo != null)
@@ -349,7 +389,7 @@ namespace MCPServerMod
                 bool diggable = Grid.Objects[cell, (int)ObjectLayer.DigPlacer] != null;
                 int light = Grid.LightCount[cell];
                 float decor = (float)Math.Round(Grid.Decor[cell], 1);
-                
+
                 string germ_type = null;
                 int diseaseIdx = Grid.DiseaseIdx[cell];
                 if (diseaseIdx != 255 && diseaseIdx >= 0 && diseaseIdx < Db.Get().Diseases.Count)
@@ -359,7 +399,8 @@ namespace MCPServerMod
                 int germ_count = Grid.DiseaseCount[cell];
                 float radiation = (float)Math.Round(Grid.Radiation[cell], 1);
 
-                var fullData = new {
+                var fullData = new
+                {
                     status = "success",
                     revealed = true,
                     x = x,
@@ -386,6 +427,7 @@ namespace MCPServerMod
             {
                 return "{\"status\": \"error\", \"message\": \"Timed out waiting for main thread (is the game paused or loading?)\"}";
             }
+
             return resultJson;
         }
 
@@ -456,11 +498,13 @@ namespace MCPServerMod
                                 }
                             }
                         }
+
                         cells.Add(cellData);
                     }
                 }
 
-                var fullData = new {
+                var fullData = new
+                {
                     status = "success",
                     width = w,
                     height = h,
@@ -475,6 +519,7 @@ namespace MCPServerMod
             {
                 return "{\"status\": \"error\", \"message\": \"Timed out waiting for main thread (is the game paused or loading?)\"}";
             }
+
             return resultJson;
         }
 
@@ -508,7 +553,8 @@ namespace MCPServerMod
                     }
                 }
 
-                var fullData = new {
+                var fullData = new
+                {
                     status = "success",
                     solids = solids,
                     liquids = liquids,
@@ -521,6 +567,7 @@ namespace MCPServerMod
             {
                 return "{\"status\": \"error\", \"message\": \"Timed out waiting for main thread (is the game paused or loading?)\"}";
             }
+
             return resultJson;
         }
 
@@ -534,7 +581,7 @@ namespace MCPServerMod
                 int cycle = GameClock.Instance.GetCycle();
                 float time_of_day_pct = GameClock.Instance.GetTimeSinceStartOfCycle() / GameClock.Instance.GetCycleLengthSeconds();
                 int duplicant_count = Components.LiveMinionIdentities.Count;
-                
+
                 string research_active = null;
                 var activeResearch = Research.Instance.GetActiveResearch();
                 if (activeResearch != null && activeResearch.tech != null)
@@ -545,7 +592,6 @@ namespace MCPServerMod
                 var alertsList = new List<Dictionary<string, string>>();
                 if (NotificationManager.Instance != null)
                 {
-                    // Access notifications using reflection since the field is private
                     var field = typeof(NotificationManager).GetField("notifications", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
                     if (field != null)
                     {
@@ -566,7 +612,8 @@ namespace MCPServerMod
                     }
                 }
 
-                var fullData = new {
+                var fullData = new
+                {
                     status = "success",
                     cycle = cycle,
                     time_of_day_pct = time_of_day_pct,
@@ -581,14 +628,440 @@ namespace MCPServerMod
             {
                 return "{\"status\": \"error\", \"message\": \"Timed out waiting for main thread (is the game paused or loading?)\"}";
             }
+
             return resultJson;
+        }
+
+        private static string EnqueueDuplicants()
+        {
+            bool ran = false;
+            string result = "";
+
+            bool threadSuccess = ExecuteOnMainThread(() =>
+            {
+                ran = true;
+                var dupes = new List<object>();
+
+                foreach (MinionIdentity minion in Components.LiveMinionIdentities.Items)
+                {
+                    if (minion == null) continue;
+
+                    GameObject go = minion.gameObject;
+                    if (go == null) continue;
+
+                    string name = null;
+                    var selectable = go.GetComponent<KSelectable>();
+                    if (selectable != null) name = selectable.GetName();
+                    if (name == null) name = minion.name;
+
+                    int x = -1;
+                    int y = -1;
+                    int cell = Grid.PosToCell(go.transform.position);
+                    if (Grid.IsValidCell(cell))
+                    {
+                        Grid.CellToXY(cell, out x, out y);
+                    }
+
+                    float? hp = null;
+                    float? stress = null;
+                    float? calories = null;
+                    float? stamina = null;
+                    float? oxygen = null;
+                    float? bladder = null;
+                    var amounts = go.GetAmounts();
+                    if (amounts != null)
+                    {
+                        var hpAmt = amounts.Get(Db.Get().Amounts.HitPoints.Id);
+                        if (hpAmt != null) hp = (float)Math.Round(hpAmt.value, 1);
+
+                        var stressAmt = amounts.Get(Db.Get().Amounts.Stress.Id);
+                        if (stressAmt != null) stress = (float)Math.Round(stressAmt.value, 1);
+
+                        var calAmt = amounts.Get(Db.Get().Amounts.Calories.Id);
+                        if (calAmt != null) calories = (float)Math.Round(calAmt.value, 1);
+
+                        var stamAmt = amounts.Get(Db.Get().Amounts.Stamina.Id);
+                        if (stamAmt != null) stamina = (float)Math.Round(stamAmt.value, 1);
+
+                        var breathAmt = amounts.Get(Db.Get().Amounts.Breath.Id);
+                        if (breathAmt != null) oxygen = (float)Math.Round(breathAmt.value, 1);
+
+                        var bladderAmt = amounts.Get(Db.Get().Amounts.Bladder.Id);
+                        if (bladderAmt != null) bladder = (float)Math.Round(bladderAmt.value, 1);
+                    }
+
+                    float? temperature = null;
+                    var pe = go.GetComponent<PrimaryElement>();
+                    if (pe != null) temperature = (float)Math.Round(pe.Temperature, 1);
+
+                    string current_task = null;
+                    var choreConsumer = go.GetComponent<ChoreConsumer>();
+                    if (choreConsumer != null && choreConsumer.choreDriver != null)
+                    {
+                        var currentChore = choreConsumer.choreDriver.GetCurrentChore();
+                        if (currentChore != null && currentChore.choreType != null)
+                        {
+                            current_task = currentChore.choreType.Id;
+                        }
+                    }
+
+                    string job_title = null;
+                    var skills = new List<object>();
+                    var resume = go.GetComponent<MinionResume>();
+                    if (resume != null)
+                    {
+                        job_title = resume.CurrentRole;
+                        if (resume.MasteryBySkillID != null)
+                        {
+                            foreach (var kvp in resume.MasteryBySkillID)
+                            {
+                                if (kvp.Value)
+                                {
+                                    skills.Add(new { id = kvp.Key, level = 1 });
+                                }
+                            }
+                        }
+                    }
+
+                    string schedule_block = null;
+                    var schedulable = go.GetComponent<Schedulable>();
+                    if (schedulable != null && ScheduleManager.Instance != null)
+                    {
+                        var schedule = ScheduleManager.Instance.GetSchedule(schedulable);
+                        if (schedule != null)
+                        {
+                            var block = schedule.GetCurrentScheduleBlock();
+                            if (block != null)
+                            {
+                                schedule_block = block.GroupId;
+                            }
+                        }
+                    }
+
+                    var traits = new List<string>();
+                    var traitsComponent = go.GetComponent<Klei.AI.Traits>();
+                    if (traitsComponent != null && traitsComponent.TraitList != null)
+                    {
+                        foreach (var t in traitsComponent.TraitList)
+                        {
+                            if (t != null) traits.Add(t.Id);
+                        }
+                    }
+
+                    dupes.Add(new
+                    {
+                        id = go.GetInstanceID(),
+                        name = name,
+                        x = x,
+                        y = y,
+                        hp = hp,
+                        stress = stress,
+                        calories = calories,
+                        stamina = stamina,
+                        oxygen = oxygen,
+                        bladder = bladder,
+                        temperature = temperature,
+                        current_task = current_task,
+                        job_title = job_title,
+                        schedule_block = schedule_block,
+                        skills = skills,
+                        traits = traits
+                    });
+                }
+
+                result = JsonConvert.SerializeObject(new { status = "success", duplicants = dupes });
+            });
+
+            if (!threadSuccess || !ran)
+            {
+                return "{\"status\": \"error\", \"message\": \"Timed out waiting for main thread (is the game paused or loading?)\"}";
+            }
+
+            return result;
+        }
+
+        private static string EnqueueBuildings(BuildingsRequest req)
+        {
+            if (req.region == null && string.IsNullOrEmpty(req.prefab_id))
+            {
+                return "{\"status\": \"error\", \"message\": \"at least one of region or prefab_id is required\"}";
+            }
+
+            bool ran = false;
+            string result = "";
+
+            bool threadSuccess = ExecuteOnMainThread(() =>
+            {
+                ran = true;
+                var allItems = new List<object>();
+
+                foreach (BuildingComplete building in Components.BuildingCompletes.Items)
+                {
+                    if (building == null || building.Def == null) continue;
+
+                    string prefab_id = building.Def.PrefabID;
+
+                    if (!string.IsNullOrEmpty(req.prefab_id) && prefab_id != req.prefab_id) continue;
+
+                    Vector2I xy = Grid.PosToXY(building.transform.position);
+                    int x = xy.x;
+                    int y = xy.y;
+
+                    if (req.region != null)
+                    {
+                        if (x < req.region.x_min || x > req.region.x_max || y < req.region.y_min || y > req.region.y_max) continue;
+                    }
+
+                    string state = "idle";
+                    var op = building.GetComponent<Operational>();
+                    if (op != null)
+                    {
+                        if (op.IsOperational)
+                        {
+                            state = "working";
+                            if (op.IsActive) state = "working";
+                        }
+                        else
+                        {
+                            state = "disabled";
+                        }
+                    }
+
+                    var hp = building.GetComponent<BuildingHP>();
+                    if (hp != null && hp.IsBroken)
+                    {
+                        state = "broken";
+                    }
+
+                    if (!string.IsNullOrEmpty(req.state) && state != req.state) continue;
+
+                    string orientation = building.Orientation.ToString();
+
+                    int jobPriority = 5;
+                    var prioritizable = building.GetComponent<Prioritizable>();
+                    if (prioritizable != null)
+                    {
+                        jobPriority = prioritizable.GetMasterPriority().priority_value;
+                    }
+
+                    bool operational = op != null ? op.IsOperational : true;
+
+                    allItems.Add(new
+                    {
+                        prefab_id = prefab_id,
+                        x = x,
+                        y = y,
+                        orientation = orientation,
+                        state = state,
+                        priority = jobPriority,
+                        operational = operational
+                    });
+                }
+
+                int total = allItems.Count;
+                int limit = Math.Min(req.limit, 200);
+                if (limit <= 0) limit = 100;
+                int offset = Math.Max(req.offset, 0);
+
+                var items = allItems.Skip(offset).Take(limit).ToList();
+                int? next_offset = offset + limit < total ? (int?)(offset + limit) : null;
+
+                result = JsonConvert.SerializeObject(new
+                {
+                    status = "success",
+                    total = total,
+                    next_offset = next_offset,
+                    items = items
+                });
+            });
+
+            if (!threadSuccess || !ran)
+            {
+                return "{\"status\": \"error\", \"message\": \"Timed out waiting for main thread (is the game paused or loading?)\"}";
+            }
+
+            return result;
+        }
+
+        private static string EnqueueJobs(JobsRequest req)
+        {
+            bool ran = false;
+            string result = "";
+
+            bool threadSuccess = ExecuteOnMainThread(() =>
+            {
+                ran = true;
+                var allItems = new List<object>();
+
+                if (string.IsNullOrEmpty(req.type) || req.type == "dig")
+                {
+                    foreach (Diggable diggable in Components.Diggables.Items)
+                    {
+                        if (diggable == null || diggable.gameObject == null) continue;
+
+                        int cell = Grid.PosToCell(diggable.transform.position);
+                        if (!Grid.IsValidCell(cell)) continue;
+
+                        int x;
+                        int y;
+                        Grid.CellToXY(cell, out x, out y);
+
+                        if (req.region != null && (x < req.region.x_min || x > req.region.x_max || y < req.region.y_min || y > req.region.y_max)) continue;
+
+                        int jobPriority = 5;
+                        var prioritizable = diggable.GetComponent<Prioritizable>();
+                        if (prioritizable != null) jobPriority = prioritizable.GetMasterPriority().priority_value;
+
+                        float progress_pct = 0f;
+                        if (diggable.GetWorkTime() > 0)
+                        {
+                            progress_pct = (float)Math.Round(1.0f - (diggable.WorkTimeRemaining / diggable.GetWorkTime()), 1);
+                            if (progress_pct < 0f) progress_pct = 0f;
+                            if (progress_pct > 1f) progress_pct = 1f;
+                        }
+
+                        string assigned_dupe = null;
+                        if (diggable.worker != null && diggable.worker.gameObject != null)
+                        {
+                            var selectable = diggable.worker.gameObject.GetComponent<KSelectable>();
+                            if (selectable != null) assigned_dupe = selectable.GetName();
+                        }
+
+                        allItems.Add(new
+                        {
+                            type = "dig",
+                            x = x,
+                            y = y,
+                            priority = jobPriority,
+                            assigned_dupe = assigned_dupe,
+                            progress_pct = progress_pct
+                        });
+                    }
+                }
+
+                if (string.IsNullOrEmpty(req.type) || req.type == "build")
+                {
+                    foreach (Constructable constructable in Components.Constructables.Items)
+                    {
+                        if (constructable == null || constructable.gameObject == null) continue;
+
+                        int cell = Grid.PosToCell(constructable.transform.position);
+                        if (!Grid.IsValidCell(cell)) continue;
+
+                        int x;
+                        int y;
+                        Grid.CellToXY(cell, out x, out y);
+
+                        if (req.region != null && (x < req.region.x_min || x > req.region.x_max || y < req.region.y_min || y > req.region.y_max)) continue;
+
+                        int jobPriority = 5;
+                        var prioritizable = constructable.GetComponent<Prioritizable>();
+                        if (prioritizable != null) jobPriority = prioritizable.GetMasterPriority().priority_value;
+
+                        float progress_pct = 0f;
+                        if (constructable.GetWorkTime() > 0)
+                        {
+                            progress_pct = (float)Math.Round(1.0f - (constructable.WorkTimeRemaining / constructable.GetWorkTime()), 1);
+                            if (progress_pct < 0f) progress_pct = 0f;
+                            if (progress_pct > 1f) progress_pct = 1f;
+                        }
+
+                        string assigned_dupe = null;
+                        if (constructable.worker != null && constructable.worker.gameObject != null)
+                        {
+                            var selectable = constructable.worker.gameObject.GetComponent<KSelectable>();
+                            if (selectable != null) assigned_dupe = selectable.GetName();
+                        }
+
+                        allItems.Add(new
+                        {
+                            type = "build",
+                            x = x,
+                            y = y,
+                            priority = jobPriority,
+                            assigned_dupe = assigned_dupe,
+                            progress_pct = progress_pct
+                        });
+                    }
+                }
+
+                if (string.IsNullOrEmpty(req.type) || req.type == "deconstruct")
+                {
+                    foreach (Deconstructable deconstructable in Components.Deconstructables.Items)
+                    {
+                        if (deconstructable == null || deconstructable.gameObject == null || !deconstructable.IsMarkedForDeconstruction()) continue;
+
+                        int cell = Grid.PosToCell(deconstructable.transform.position);
+                        if (!Grid.IsValidCell(cell)) continue;
+
+                        int x;
+                        int y;
+                        Grid.CellToXY(cell, out x, out y);
+
+                        if (req.region != null && (x < req.region.x_min || x > req.region.x_max || y < req.region.y_min || y > req.region.y_max)) continue;
+
+                        int jobPriority = 5;
+                        var prioritizable = deconstructable.GetComponent<Prioritizable>();
+                        if (prioritizable != null) jobPriority = prioritizable.GetMasterPriority().priority_value;
+
+                        float progress_pct = 0f;
+                        if (deconstructable.GetWorkTime() > 0)
+                        {
+                            progress_pct = (float)Math.Round(1.0f - (deconstructable.WorkTimeRemaining / deconstructable.GetWorkTime()), 1);
+                            if (progress_pct < 0f) progress_pct = 0f;
+                            if (progress_pct > 1f) progress_pct = 1f;
+                        }
+
+                        string assigned_dupe = null;
+                        if (deconstructable.worker != null && deconstructable.worker.gameObject != null)
+                        {
+                            var selectable = deconstructable.worker.gameObject.GetComponent<KSelectable>();
+                            if (selectable != null) assigned_dupe = selectable.GetName();
+                        }
+
+                        allItems.Add(new
+                        {
+                            type = "deconstruct",
+                            x = x,
+                            y = y,
+                            priority = jobPriority,
+                            assigned_dupe = assigned_dupe,
+                            progress_pct = progress_pct
+                        });
+                    }
+                }
+
+                int total = allItems.Count;
+                int limit = Math.Min(req.limit, 200);
+                if (limit <= 0) limit = 100;
+                int offset = Math.Max(req.offset, 0);
+
+                var items = allItems.Skip(offset).Take(limit).ToList();
+                int? next_offset = offset + limit < total ? (int?)(offset + limit) : null;
+
+                result = JsonConvert.SerializeObject(new
+                {
+                    status = "success",
+                    total = total,
+                    next_offset = next_offset,
+                    items = items
+                });
+            });
+
+            if (!threadSuccess || !ran)
+            {
+                return "{\"status\": \"error\", \"message\": \"Timed out waiting for main thread (is the game paused or loading?)\"}";
+            }
+
+            return result;
         }
 
         private static bool ExecuteOnMainThread(System.Action action)
         {
             ManualResetEvent doneEvent = new ManualResetEvent(false);
 
-            System.Action wrappedAction = () => {
+            System.Action wrappedAction = () =>
+            {
                 try {
                     action();
                 } finally {
