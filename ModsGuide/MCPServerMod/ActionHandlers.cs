@@ -361,24 +361,38 @@ namespace MCPServerMod
                         return;
                     }
 
-                    // Spawn the Diggable prefab directly instead of going through DigTool.PlaceDig,
-                    // which depends on UI tool state that is absent when we are called from HTTP.
-                    GameObject prefab = Assets.GetPrefab(DiggableConfig.ID);
+                    // Refuse if a build is queued on this cell (matches DigTool.PlaceDig behavior).
+                    for (int layer = 0; layer < 45; layer++)
+                    {
+                        GameObject obj = Grid.Objects[cell, layer];
+                        if (obj != null && obj.GetComponent<Constructable>() != null)
+                        {
+                            error = "Cell has a pending build (cannot place dig)";
+                            return;
+                        }
+                    }
+
+                    // Spawn the DigPlacer prefab directly instead of going through DigTool.PlaceDig,
+                    // which dereferences DigTool.Instance.visualizerLayer and crashes when the player
+                    // has not activated the dig tool from the UI yet.
+                    GameObject prefab = Assets.GetPrefab(new Tag("DigPlacer"));
                     if (prefab == null)
                     {
-                        error = "DiggableConfig prefab not registered in Assets";
+                        error = "DigPlacer prefab not registered in Assets";
                         return;
                     }
 
-                    Vector3 pos = Grid.CellToPosCBC(cell, Grid.SceneLayer.Move);
-                    GameObject go = GameUtil.KInstantiate(prefab, pos, Grid.SceneLayer.Move, null, 0);
+                    Vector3 pos = Grid.CellToPosCBC(cell, Grid.SceneLayer.Front);
+                    pos.z += -0.15f;
+                    GameObject go = GameUtil.KInstantiate(prefab, pos, Grid.SceneLayer.Front, null, 0);
                     if (go == null)
                     {
-                        error = "KInstantiate returned null for Diggable prefab";
+                        error = "KInstantiate returned null for DigPlacer prefab";
                         return;
                     }
 
                     go.SetActive(true);
+                    Grid.Objects[cell, (int)ObjectLayer.DigPlacer] = go;
 
                     Prioritizable pr = go.GetComponent<Prioritizable>();
                     if (pr != null)
