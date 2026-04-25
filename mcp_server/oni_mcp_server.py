@@ -144,5 +144,18 @@ def oni_jobs(type: str | None = None, region: dict | None = None, limit: int = 1
         "offset": offset
     })
 
+@mcp.tool()
+def oni_research() -> str:
+    """Read the full research tree state, including active tech, queue, and available techs."""
+    return send_request("/research", {})
+
+@mcp.tool()
+def oni_research_set_active(tech_id: str | None) -> str:
+    """Set or clear the active research target.
+    Args:
+        tech_id: The ID of the tech to research (e.g. 'FarmingTech'), or None to clear the active research.
+    """
+    return send_request("/research_set_active", {"tech_id": tech_id})
+
 if __name__ == "__main__":
     mcp.run()

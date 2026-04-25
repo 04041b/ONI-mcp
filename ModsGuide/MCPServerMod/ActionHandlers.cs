@@ -4,6 +4,7 @@ using System.Linq;
 using UnityEngine;
 using System.Threading;
 using Newtonsoft.Json;
+using Klei.AI;
 
 namespace MCPServerMod
 {
@@ -25,6 +26,11 @@ namespace MCPServerMod
             public int x_max { get; set; } = -1;
             public int y_max { get; set; } = -1;
             public List<string> fields { get; set; }
+        }
+
+        private class ResearchSetActiveRequest
+        {
+            public string tech_id { get; set; }
         }
 
         private class DigRequest
@@ -153,6 +159,16 @@ namespace MCPServerMod
                     if (req == null) req = new JobsRequest();
                     return EnqueueJobs(req);
                 }
+                else if (path == "/research")
+                {
+                    return EnqueueGetResearch();
+                }
+                else if (path == "/research_set_active")
+                {
+                    var req = JsonConvert.DeserializeObject<ResearchSetActiveRequest>(jsonBody);
+                    if (req == null) req = new ResearchSetActiveRequest();
+                    return EnqueueResearchSetActive(req.tech_id);
+                }
 
                 return "{\"status\": \"error\", \"message\": \"Unknown endpoint\"}";
             }
@@ -161,6 +177,121 @@ namespace MCPServerMod
                 string msg = ex.Message.Replace("\"", "\\\"");
                 return "{\"status\": \"error\", \"message\": \"Invalid JSON: " + msg + "\"}";
             }
+        }
+
+        private static string EnqueueGetResearch()
+        {
+            if (Db.Get() == null || Research.Instance == null) return "{\"status\": \"error\", \"message\": \"Research system not initialized\"}";
+
+            bool ran = false;
+            string resultJson = null;
+
+            bool threadSuccess = ExecuteOnMainThread(() =>
+            {
+                ran = true;
+
+                TechInstance activeTechInst = Research.Instance.GetActiveResearch();
+                string active_tech = activeTechInst?.tech?.Id;
+                
+                List<string> queued = new List<string>();
+                var queue = Research.Instance.GetResearchQueue();
+                if (queue != null)
+                {
+                    foreach (var ti in queue)
+                    {
+                        if (ti != null && ti.tech != null)
+                        {
+                            queued.Add(ti.tech.Id);
+                        }
+                    }
+                }
+
+                Dictionary<string, float> points_in_progress = new Dictionary<string, float>();
+                if (activeTechInst != null && activeTechInst.progressInventory != null && activeTechInst.progressInventory.PointsByTypeID != null)
+                {
+                    points_in_progress = new Dictionary<string, float>(activeTechInst.progressInventory.PointsByTypeID);
+                }
+
+                var techsList = new List<object>();
+                foreach (Tech tech in Db.Get().Techs.resources)
+                {
+                    var requiredIds = new List<string>();
+                    if (tech.requiredTech != null)
+                    {
+                        foreach (var req in tech.requiredTech)
+                        {
+                            if (req != null)
+                            {
+                                requiredIds.Add(req.Id);
+                            }
+                        }
+                    }
+
+                    techsList.Add(new
+                    {
+                        id = tech.Id,
+                        name = tech.Name,
+                        complete = tech.IsComplete(),
+                        active = tech.Id == active_tech,
+                        queued = queued.Contains(tech.Id),
+                        costs = tech.costsByResearchTypeID,
+                        required = requiredIds,
+                        unlocks = tech.unlockedItemIDs
+                    });
+                }
+
+                resultJson = JsonConvert.SerializeObject(new
+                {
+                    status = "success",
+                    active_tech = active_tech,
+                    queued = queued,
+                    points_in_progress = points_in_progress,
+                    techs = techsList
+                });
+            });
+
+            if (!threadSuccess) return "{\"status\": \"error\", \"message\": \"Action queue timeout or thread failure\"}";
+            if (!ran) return "{\"status\": \"error\", \"message\": \"Action dropped or not executed\"}";
+            
+            return resultJson;
+        }
+
+        private static string EnqueueResearchSetActive(string tech_id)
+        {
+            if (Db.Get() == null || Research.Instance == null) return "{\"status\": \"error\", \"message\": \"Research system not initialized\"}";
+
+            bool ran = false;
+            string errorMsg = null;
+            bool threadSuccess = ExecuteOnMainThread(() =>
+            {
+                ran = true;
+                if (string.IsNullOrEmpty(tech_id))
+                {
+                    Research.Instance.SetActiveResearch(null, false);
+                }
+                else
+                {
+                    Tech tech = Db.Get().Techs.TryGet(tech_id);
+                    if (tech == null)
+                    {
+                        errorMsg = "unknown tech_id: " + tech_id;
+                    }
+                    else if (tech.IsComplete())
+                    {
+                        errorMsg = "tech already complete";
+                    }
+                    else
+                    {
+                        Research.Instance.SetActiveResearch(tech, false);
+                    }
+                }
+            });
+
+            if (!threadSuccess) return "{\"status\": \"error\", \"message\": \"Action queue timeout or thread failure\"}";
+            if (!ran) return "{\"status\": \"error\", \"message\": \"Action dropped or not executed\"}";
+            if (errorMsg != null) return JsonConvert.SerializeObject(new { status = "error", message = errorMsg });
+            
+            return JsonConvert.SerializeObject(new { status = "success" });
         }
 
         private static string EnqueueDig(int cell)
@@ -579,7 +710,7 @@ namespace MCPServerMod
             {
                 ran = true;
                 int cycle = GameClock.Instance.GetCycle();
-                float time_of_day_pct = GameClock.Instance.GetTimeSinceStartOfCycle() / GameClock.Instance.GetCycleLengthSeconds();
+                float time_of_day_pct = GameClock.Instance.GetCurrentCycleAsPercentage();
                 int duplicant_count = Components.LiveMinionIdentities.Count;
 
                 string research_active = null;
@@ -941,7 +1072,7 @@ namespace MCPServerMod
 
                 if (string.IsNullOrEmpty(req.type) || req.type == "build")
                 {
-                    foreach (Constructable constructable in Components.Constructables.Items)
+                    foreach (Constructable constructable in UnityEngine.Object.FindObjectsOfType<Constructable>())
                     {
                         if (constructable == null || constructable.gameObject == null) continue;
 
@@ -987,7 +1118,7 @@ namespace MCPServerMod
 
                 if (string.IsNullOrEmpty(req.type) || req.type == "deconstruct")
                 {
-                    foreach (Deconstructable deconstructable in Components.Deconstructables.Items)
+                    foreach (Deconstructable deconstructable in UnityEngine.Object.FindObjectsOfType<Deconstructable>())
                     {
                         if (deconstructable == null || deconstructable.gameObject == null || !deconstructable.IsMarkedForDeconstruction()) continue;
 
