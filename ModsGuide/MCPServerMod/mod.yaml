@@ -1,0 +1,2 @@
+title: ONI MCP Server
+description: Exposes player-equivalent actions and observations to AI agents via Model Context Protocol over a localhost HTTP bridge.
