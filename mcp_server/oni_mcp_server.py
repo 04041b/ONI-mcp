@@ -32,7 +32,7 @@ def oni_dig(x: int, y: int) -> str:
     return send_request("/dig", {"x": x, "y": y})
 
 @mcp.tool()
-def oni_build(x: int, y: int, building_id: str, materials: list[str], priority: int = 5) -> str:
+def oni_build(x: int, y: int, building_id: str, materials: list[str], priority: int = 5, orientation: str = "Neutral") -> str:
     """Queue a build command at the specified coordinates.
     Args:
         x: The X coordinate
@@ -40,13 +40,15 @@ def oni_build(x: int, y: int, building_id: str, materials: list[str], priority: 
         building_id: The ID of the building to construct (e.g., 'Wire', 'Tile')
         materials: A list of material tags to use (e.g., ['Copper'], ['Sandstone'])
         priority: Construction priority (1-9), default is 5
+        orientation: The orientation to build the building with (e.g., 'Neutral', 'R90', 'R180', 'R270', 'FlipH', 'FlipV')
     """
     return send_request("/build", {
         "x": x,
         "y": y,
         "building_id": building_id,
         "materials": materials,
-        "priority": priority
+        "priority": priority,
+        "orientation": orientation
     })
 
 @mcp.tool()
@@ -191,6 +193,16 @@ def oni_set_speed(speed: int) -> str:
         return json.dumps({"status": "error", "message": "speed must be 0, 1, or 2"})
         
     return send_request("/set_speed", {"speed": speed})
+
+@mcp.tool()
+def oni_building_defs() -> str:
+    """Enumerate all building definitions."""
+    return send_request("/building_defs", {})
+
+@mcp.tool()
+def oni_element_defs() -> str:
+    """Enumerate all elements/materials."""
+    return send_request("/element_defs", {})
 
 if __name__ == "__main__":
     mcp.run()

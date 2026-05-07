@@ -47,6 +47,7 @@ namespace MCPServerMod
             public string building_id { get; set; }
             public List<string> materials { get; set; }
             public int priority { get; set; } = 5;
+            public string orientation { get; set; } = "Neutral";
         }
 
         private class DeconstructRequest
@@ -122,7 +123,7 @@ namespace MCPServerMod
                 {
                     var req = JsonConvert.DeserializeObject<BuildRequest>(jsonBody);
                     int cell = (req.x >= 0 && req.y >= 0) ? Grid.XYToCell(req.x, req.y) : -1;
-                    return EnqueueBuild(cell, req.building_id, req.materials, req.priority);
+                    return EnqueueBuild(cell, req.building_id, req.materials, req.priority, req.orientation);
                 }
                 else if (path == "/cancel")
                 {
@@ -203,6 +204,14 @@ namespace MCPServerMod
                     var req = JsonConvert.DeserializeObject<SetSpeedRequest>(jsonBody);
                     return EnqueueSetSpeed(req.speed);
                 }
+                else if (path == "/building_defs")
+                {
+                    return EnqueueBuildingDefs();
+                }
+                else if (path == "/element_defs")
+                {
+                    return EnqueueElementDefs();
+                }
 
                 return "{\"status\": \"error\", \"message\": \"Unknown endpoint\"}";
             }
@@ -211,6 +220,87 @@ namespace MCPServerMod
                 string msg = ex.Message.Replace("\"", "\\\"");
                 return "{\"status\": \"error\", \"message\": \"Invalid JSON: " + msg + "\"}";
             }
+        }
+
+        private static string EnqueueBuildingDefs()
+        {
+            bool ran = false;
+            string result = "";
+            bool threadSuccess = ExecuteOnMainThread(() =>
+            {
+                ran = true;
+                
+                var buildings = (Assets.BuildingDefs ?? new List<BuildingDef>())
+                    .Where(def => def != null)
+                    .Select(def => new
+                    {
+                        id = def.PrefabID,
+                        name = def.Name ?? def.PrefabID,
+                        material_categories = def.MaterialCategory != null ? def.MaterialCategory.ToList() : new List<string>(),
+                        width = def.WidthInCells,
+                        height = def.HeightInCells,
+                        permitted_rotations = def.PermittedRotations.ToString()
+                    })
+                    .OrderBy(b => b.id)
+                    .ToList();
+
+                result = JsonConvert.SerializeObject(new {
+                    status = "success",
+                    buildings = buildings
+                });
+            });
+
+            if (!threadSuccess || !ran)
+            {
+                return "{\"status\": \"error\", \"message\": \"Timed out waiting for main thread (is the game paused or loading?)\"}";
+            }
+
+            return result;
+        }
+
+        private static string EnqueueElementDefs()
+        {
+            bool ran = false;
+            string result = "";
+            bool threadSuccess = ExecuteOnMainThread(() =>
+            {
+                ran = true;
+                
+                var elements = (ElementLoader.elements ?? new List<Element>())
+                    .Where(el => el != null)
+                    .Select(el => {
+                        var tags = new List<string>();
+                        if (el.tag.IsValid) tags.Add(el.tag.ToString());
+                        if (el.materialCategory.IsValid && !tags.Contains(el.materialCategory.ToString())) tags.Add(el.materialCategory.ToString());
+                        if (el.oreTags != null) 
+                        {
+                            foreach (var t in el.oreTags) 
+                            {
+                                if (t.IsValid && !tags.Contains(t.ToString())) tags.Add(t.ToString());
+                            }
+                        }
+                        return new {
+                            id = el.id.ToString(),
+                            name = el.name ?? el.id.ToString(),
+                            tags = tags,
+                            state = el.state.ToString()
+                        };
+                    })
+                    .OrderBy(e => e.id)
+                    .ToList();
+
+                result = JsonConvert.SerializeObject(new {
+                    status = "success",
+                    elements = elements
+                });
+            });
+
+            if (!threadSuccess || !ran)
+            {
+                return "{\"status\": \"error\", \"message\": \"Timed out waiting for main thread (is the game paused or loading?)\"}";
+            }
+
+            return result;
         }
 
         private static string EnqueueGetResearch()
@@ -418,10 +508,20 @@ namespace MCPServerMod
             return JsonConvert.SerializeObject(new { status = "error", message = error ?? "Cell cannot be dug" });
         }
 
-        private static string EnqueueBuild(int cell, string buildingId, List<string> materials, int priority)
+        private static string EnqueueBuild(int cell, string buildingId, List<string> materials, int priority, string orientationStr)
         {
             if (cell < 0 || cell >= Grid.CellCount) return "{\"status\": \"error\", \"message\": \"Invalid cell coordinates\"}";
             if (string.IsNullOrEmpty(buildingId)) return "{\"status\": \"error\", \"message\": \"building_id is required\"}";
+
+            Orientation orientation;
+            try
+            {
+                orientation = (Orientation)Enum.Parse(typeof(Orientation), orientationStr, true);
+            }
+            catch (Exception)
+            {
+                return JsonConvert.SerializeObject(new { status = "error", message = $"unknown orientation: {orientationStr}" });
+            }
 
             bool ran = false;
             bool success = false;
@@ -460,7 +560,6 @@ namespace MCPServerMod
                 }
 
                 Vector3 pos = Grid.CellToPosCBC(cell, Grid.SceneLayer.Building);
-                Orientation orientation = Orientation.Neutral;
                 string facadeID = "DEFAULT_FACADE";
 
                 if (def.IsValidBuildLocation(null, pos, orientation) && def.IsValidPlaceLocation(null, pos, orientation, out string _))
